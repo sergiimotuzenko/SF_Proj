@@ -37,7 +37,7 @@ public with sharing class LeadFollowUpTaskCreator {
      * Finds open leads older than specified days and creates follow-up tasks for their owners.
      * Uses user mode for security enforcement (FLS and sharing rules).
      *
-     * @param daysThreshold Number of days to consider a lead as old
+     * @param daysThreshold Number of days to consider a lead as old (0 or negative means all open leads)
      * @param taskDueDays Number of days until the task is due
      * @return LeadFollowUpResult containing counts of processed leads and created tasks
      */
@@ -45,7 +45,7 @@ public with sharing class LeadFollowUpTaskCreator {
         LeadFollowUpResult result = new LeadFollowUpResult();
 
         // Validate input parameters
-        if (daysThreshold == null || daysThreshold < 1) {
+        if (daysThreshold == null || daysThreshold < 0) {
             daysThreshold = DEFAULT_DAYS_THRESHOLD;
         }
         if (taskDueDays == null || taskDueDays < 1) {
@@ -53,15 +53,24 @@ public with sharing class LeadFollowUpTaskCreator {
         }
 
         // Calculate the cutoff date
-        Date cutoffDate = Date.today().addDays(-daysThreshold);
+        // When daysThreshold is 0, we want all leads created today or earlier
+        // Use Date comparison for CreatedDate (DAY_ONLY function)
+        Date cutoffDate;
+        if (daysThreshold == 0) {
+            // Include all leads created today or earlier
+            cutoffDate = Date.today();
+        } else {
+            cutoffDate = Date.today().addDays(-daysThreshold);
+        }
 
         // Query open leads older than the threshold
         // Using WITH USER_MODE to enforce field-level security and sharing rules
+        // DAY_ONLY(CreatedDate) converts DateTime to Date for comparison
         List<Lead> oldOpenLeads = [
             SELECT Id, OwnerId, Name, Company, Status, CreatedDate
             FROM Lead
             WHERE IsConverted = false
-            AND CreatedDate <= :cutoffDate
+            AND DAY_ONLY(CreatedDate) <= :cutoffDate
             WITH USER_MODE
         ];
 
